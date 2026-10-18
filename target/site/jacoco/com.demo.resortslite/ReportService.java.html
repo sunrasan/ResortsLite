@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReportService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">ResortsLite</a> &gt; <a href="index.source.html" class="el_package">com.demo.resortslite</a> &gt; <span class="el_source">ReportService.java</span></div><h1>ReportService.java</h1><pre class="source lang-java linenums">package com.demo.resortslite;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+// Migrated from legacy java.util.Date + java.text.SimpleDateFormat to java.time API
+// for Java 17 compatibility
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+<span class="fc" id="L17">public class ReportService {</span>
+
+    // Externalised to environment variable — avoids hardcoded absolute path.
+    // For cloud deployments, replace with AWS S3 or equivalent object storage.
+    @Value(&quot;${app.report.base-path:${java.io.tmpdir}/reports/}&quot;)
+    private String reportBasePath;
+
+    // Externalised to environment variable — replaces Windows-style hardcoded path
+    // that fails on Linux-based containers.
+    @Value(&quot;${app.report.backup-path:${java.io.tmpdir}/backups/nightly/}&quot;)
+    private String backupPath;
+
+    // Externalised to environment variable — container orchestration (ECS/EKS)
+    // dynamically assigns ports; do not hardcode in application logic.
+    @Value(&quot;${SERVER_PORT:8080}&quot;)
+    private int serverPort;
+
+    /**
+     * Generates a monthly booking report CSV file.
+     *
+     * @param month the month (e.g., &quot;03&quot;)
+     * @param year  the year (e.g., &quot;2024&quot;)
+     * @return a map containing the generation status and file path
+     */
+    public Map&lt;String, Object&gt; generateMonthlyReport(String month, String year) {
+<span class="fc" id="L42">        String fileName = &quot;resort_report_&quot; + month + &quot;_&quot; + year + &quot;.csv&quot;;</span>
+<span class="fc" id="L43">        String fullPath = reportBasePath + fileName;</span>
+
+<span class="fc" id="L45">        Map&lt;String, Object&gt; result = new HashMap&lt;&gt;();</span>
+
+        try {
+<span class="fc" id="L48">            File reportDir = new File(reportBasePath);</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">            if (!reportDir.exists()) {</span>
+<span class="fc" id="L50">                reportDir.mkdirs();</span>
+            }
+
+<span class="fc" id="L53">            try (FileWriter writer = new FileWriter(fullPath)) {</span>
+<span class="fc" id="L54">                writer.write(&quot;BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n&quot;);</span>
+<span class="fc" id="L55">                writer.write(&quot;BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n&quot;);</span>
+<span class="fc" id="L56">                writer.write(&quot;BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n&quot;);</span>
+            }
+
+<span class="fc" id="L59">            result.put(&quot;status&quot;, &quot;generated&quot;);</span>
+<span class="fc" id="L60">            result.put(&quot;path&quot;, fullPath);</span>
+<span class="fc" id="L61">            result.put(&quot;serverPort&quot;, serverPort);</span>
+
+<span class="fc" id="L63">        } catch (IOException e) {</span>
+<span class="fc" id="L64">            result.put(&quot;status&quot;, &quot;error&quot;);</span>
+<span class="fc" id="L65">            result.put(&quot;message&quot;, e.getMessage());</span>
+<span class="fc" id="L66">        }</span>
+
+<span class="fc" id="L68">        return result;</span>
+    }
+
+    /**
+     * Builds the download URL for a given report name.
+     * NOTE: Plain HTTP URL — enforce HTTPS for cloud/production deployments.
+     *
+     * @param reportName the name of the report file
+     * @return the download URL string
+     */
+    public String buildReportDownloadUrl(String reportName) {
+<span class="fc" id="L79">        return &quot;http://reports.resorts-internal.com:&quot; + serverPort + &quot;/download/&quot; + reportName;</span>
+    }
+
+    /**
+     * Returns system information including report paths and current timestamp.
+     *
+     * @return a map of system info key-value pairs
+     */
+    public Map&lt;String, Object&gt; getSystemInfo() {
+        // Using java.time.LocalDateTime (Java 17 compatible) instead of legacy java.util.Date
+<span class="fc" id="L89">        String timestamp = LocalDateTime.now()</span>
+<span class="fc" id="L90">                .format(DateTimeFormatter.ofPattern(&quot;yyyy-MM-dd HH:mm:ss&quot;));</span>
+<span class="fc" id="L91">        Map&lt;String, Object&gt; info = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L92">        info.put(&quot;reportPath&quot;, reportBasePath);</span>
+<span class="fc" id="L93">        info.put(&quot;backupPath&quot;, backupPath);</span>
+<span class="fc" id="L94">        info.put(&quot;serverPort&quot;, serverPort);</span>
+<span class="fc" id="L95">        info.put(&quot;generatedAt&quot;, timestamp);</span>
+<span class="fc" id="L96">        return info;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
