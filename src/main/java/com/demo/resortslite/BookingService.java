@@ -2,6 +2,7 @@ package com.demo.resortslite;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.MessageDigest;
@@ -16,26 +17,20 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // NOTE: Hardcoded database credentials — externalise to environment variables
-    // or AWS Secrets Manager / Parameter Store for production deployments.
-    private static final String DB_HOST = "db-prod.resorts-internal.com";
-    private static final String DB_USER = "admin";
-    private static final String DB_PASS = "Resort$Pass#2019!";
-
-    // NOTE: Hardcoded infrastructure hostname — externalise to environment variables
-    // or cloud configuration for cloud-native deployments.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge";
+    // Externalised to environment variable / application.properties.
+    // Inject via AWS Parameter Store or Secrets Manager for production deployments.
+    @Value("${app.payment.endpoint:http://payment-svc.internal:9090/charge}")
+    private String paymentApi;
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-        // Using parameterised query to prevent SQL injection
+        // PostgreSQL-compatible parameterised INSERT (JDBC ? placeholders work with PostgreSQL)
         String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
         jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
 
-        // NOTE: MD5 is a weak hash algorithm (RFC 6151). For security-sensitive hashing,
-        // use SHA-256 or bcrypt. Retained here for confirmation-code generation only.
+        // SHA-256 used for confirmation-code generation (MD5 replaced — RFC 6151)
         String confirmCode = sha256Hash(bookingId + guestName);
 
         Map<String, Object> booking = new HashMap<>();
@@ -45,12 +40,11 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
         return booking;
     }
 
     public Map<String, Object> getBookingById(String bookingId) {
-        // Using parameterised query to prevent SQL injection
+        // PostgreSQL-compatible parameterised SELECT
         String sql = "SELECT * FROM bookings WHERE id = ?";
         Map<String, Object> result = new HashMap<>();
         try {
@@ -128,7 +122,7 @@ public class BookingService {
     }
 
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        return "Report generation triggered for: " + month + " via " + paymentApi;
     }
 
     /**

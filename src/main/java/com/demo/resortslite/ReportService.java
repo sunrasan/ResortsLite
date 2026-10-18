@@ -1,5 +1,6 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -15,17 +16,20 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // NOTE: Hardcoded absolute path — consider using cloud object storage (e.g., AWS S3)
-    // or an environment-variable-driven path for container/cloud deployments.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/";
+    // Externalised to environment variable — avoids hardcoded absolute path.
+    // For cloud deployments, replace with AWS S3 or equivalent object storage.
+    @Value("${app.report.base-path:${java.io.tmpdir}/reports/}")
+    private String reportBasePath;
 
-    // NOTE: Windows-style absolute path will fail on Linux-based containers.
-    // Externalise to environment variable or use cross-platform path resolution.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\";
+    // Externalised to environment variable — replaces Windows-style hardcoded path
+    // that fails on Linux-based containers.
+    @Value("${app.report.backup-path:${java.io.tmpdir}/backups/nightly/}")
+    private String backupPath;
 
-    // NOTE: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS/EKS) dynamically assigns ports — externalise to config.
-    private static final int SERVER_PORT = 8080;
+    // Externalised to environment variable — container orchestration (ECS/EKS)
+    // dynamically assigns ports; do not hardcode in application logic.
+    @Value("${SERVER_PORT:8080}")
+    private int serverPort;
 
     /**
      * Generates a monthly booking report CSV file.
@@ -36,12 +40,12 @@ public class ReportService {
      */
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName;
+        String fullPath = reportBasePath + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH);
+            File reportDir = new File(reportBasePath);
             if (!reportDir.exists()) {
                 reportDir.mkdirs();
             }
@@ -54,7 +58,7 @@ public class ReportService {
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT);
+            result.put("serverPort", serverPort);
 
         } catch (IOException e) {
             result.put("status", "error");
@@ -72,7 +76,7 @@ public class ReportService {
      * @return the download URL string
      */
     public String buildReportDownloadUrl(String reportName) {
-        return "http://reports.resorts-internal.com:8080/download/" + reportName;
+        return "http://reports.resorts-internal.com:" + serverPort + "/download/" + reportName;
     }
 
     /**
@@ -85,9 +89,9 @@ public class ReportService {
         String timestamp = LocalDateTime.now()
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);
-        info.put("backupPath", BACKUP_PATH);
-        info.put("serverPort", SERVER_PORT);
+        info.put("reportPath", reportBasePath);
+        info.put("backupPath", backupPath);
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
         return info;
     }
