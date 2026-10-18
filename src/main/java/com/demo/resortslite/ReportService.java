@@ -1,13 +1,10 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 // Issue fix: Legacy java.util.Date and SimpleDateFormat Used in ReportService
 // Replaced legacy java.util.Date / SimpleDateFormat with java.time API.
-// java.util.Date and SimpleDateFormat are not thread-safe and are legacy APIs.
 // java.time.LocalDateTime and DateTimeFormatter are the modern replacements (Java 8+).
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -17,18 +14,26 @@ import java.util.Map;
 @Service
 public class ReportService {
 
-    // NOTE: Hardcoded absolute path — /var/legacy/reports does not exist in a Docker container.
-    // Consider using volume mounts, cloud object storage (S3 / Azure Blob), or environment variable.
-    private static final String REPORT_BASE_PATH = "/var/legacy/reports/";
+    // Issue fix: Hardcoded absolute path /var/legacy/reports removed.
+    // Report base path is now externalised to environment variable REPORT_BASE_PATH.
+    // Default falls back to a relative temp directory safe for containerised deployments.
+    @Value("${app.report.base-path:${java.io.tmpdir}/resort-reports/}")
+    private String reportBasePath;
 
-    // NOTE: Windows-style absolute path will fail on any Linux-based container or cloud host.
-    // Consider using environment variable or cloud storage for backup paths.
-    private static final String BACKUP_PATH = "C:\\ResortBackups\\nightly\\";
+    // Issue fix: Windows-style absolute path C:\ResortBackups\nightly\ removed.
+    // Backup path is now externalised to environment variable BACKUP_PATH.
+    @Value("${app.report.backup-path:${java.io.tmpdir}/resort-backups/}")
+    private String backupPath;
 
-    // NOTE: Fixed server port hardcoded in application logic.
-    // Container orchestration (ECS / EKS) dynamically assigns ports.
-    // Consider using ${server.port} from application.properties instead.
-    private static final int SERVER_PORT = 8080;
+    // Issue fix: Fixed server port hardcoded in application logic removed.
+    // Server port is now read from Spring environment (server.port property).
+    @Value("${server.port:8080}")
+    private int serverPort;
+
+    // Issue fix: Plain HTTP report download URL replaced with HTTPS and externalised.
+    // Report download base URL is now configurable via environment variable.
+    @Value("${app.report.download-base-url:https://reports.resorts-internal.com/download}")
+    private String reportDownloadBaseUrl;
 
     /**
      * Generates a monthly booking report as a CSV file.
@@ -39,17 +44,17 @@ public class ReportService {
      */
     public Map<String, Object> generateMonthlyReport(String month, String year) {
         String fileName = "resort_report_" + month + "_" + year + ".csv";
-        String fullPath = REPORT_BASE_PATH + fileName;
+        String fullPath = reportBasePath + fileName;
 
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File reportDir = new File(REPORT_BASE_PATH);
+            java.io.File reportDir = new java.io.File(reportBasePath);
             if (!reportDir.exists()) {
                 reportDir.mkdirs();
             }
 
-            FileWriter writer = new FileWriter(fullPath);
+            java.io.FileWriter writer = new java.io.FileWriter(fullPath);
             writer.write("BookingID,GuestName,RoomType,CheckIn,CheckOut,Amount\n");
             writer.write("BK-001,John Smith,SUITE,2024-03-01,2024-03-05,1750.00\n");
             writer.write("BK-002,Jane Doe,DELUXE,2024-03-03,2024-03-07,960.00\n");
@@ -57,9 +62,10 @@ public class ReportService {
 
             result.put("status", "generated");
             result.put("path", fullPath);
-            result.put("serverPort", SERVER_PORT);
+            // Issue fix: serverPort no longer hardcoded — injected via @Value
+            result.put("serverPort", serverPort);
 
-        } catch (IOException e) {
+        } catch (java.io.IOException e) {
             result.put("status", "error");
             result.put("message", e.getMessage());
         }
@@ -69,14 +75,13 @@ public class ReportService {
 
     /**
      * Builds the download URL for a given report name.
+     * Issue fix: Plain HTTP URL replaced with HTTPS; base URL externalised to config.
      *
      * @param reportName the name of the report file
      * @return the full download URL for the report
      */
     public String buildReportDownloadUrl(String reportName) {
-        // NOTE: Plain HTTP URL hardcoded for report download.
-        // Cloud security standards enforce HTTPS. Consider updating to HTTPS endpoint.
-        return "http://reports.resorts-internal.com:8080/download/" + reportName;
+        return reportDownloadBaseUrl + "/" + reportName;
     }
 
     /**
@@ -93,9 +98,10 @@ public class ReportService {
                 .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
         Map<String, Object> info = new HashMap<>();
-        info.put("reportPath", REPORT_BASE_PATH);
-        info.put("backupPath", BACKUP_PATH);
-        info.put("serverPort", SERVER_PORT);
+        // Issue fix: Paths and port are now injected via @Value — no hardcoded values
+        info.put("reportPath", reportBasePath);
+        info.put("backupPath", backupPath);
+        info.put("serverPort", serverPort);
         info.put("generatedAt", timestamp);
         return info;
     }

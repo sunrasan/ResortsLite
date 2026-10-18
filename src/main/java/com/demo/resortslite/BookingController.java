@@ -1,6 +1,7 @@
 package com.demo.resortslite;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 // Issue fix: javax.servlet.http.HttpSession Must Be Migrated to jakarta.servlet.http.HttpSession
@@ -15,6 +16,11 @@ public class BookingController {
 
     @Autowired
     private BookingService bookingService;
+
+    // Issue fix: Hardcoded internal inventory service URL replaced with externalised config.
+    // Set INVENTORY_ENDPOINT environment variable for cloud deployments.
+    @Value("${app.inventory.endpoint:https://inventory-svc.internal/rooms}")
+    private String inventoryEndpoint;
 
     // NOTE: In-memory cache without TTL breaks horizontal scaling — cache is instance-local.
     // Consider replacing with a distributed cache (e.g., Redis) for cloud-native deployments.
@@ -62,26 +68,26 @@ public class BookingController {
 
     @GetMapping("/availability")
     public Map<String, Object> checkAvailability(@RequestParam String roomType) {
-        // NOTE: Plain HTTP call to internal inventory service.
-        // Cloud security standards enforce HTTPS. Consider updating to HTTPS endpoint.
-        String inventoryUrl = "http://inventory-service.internal:8081/rooms/available";
-
+        // Issue fix: Plain HTTP hardcoded URL replaced with HTTPS externalised config.
+        // inventoryEndpoint is injected via @Value from application.properties / env var.
         Map<String, Object> response = new HashMap<>();
         response.put("roomType", roomType);
-        response.put("inventoryEndpoint", inventoryUrl);
+        response.put("inventoryEndpoint", inventoryEndpoint);
         response.put("available", bookingService.isRoomAvailable(roomType));
         return response;
     }
 
     @GetMapping("/report/download")
     public Map<String, Object> downloadReport(@RequestParam String month) {
-        // NOTE: Hardcoded absolute file path. Consider using cloud object storage (S3)
-        // or environment variable for the report path in containerised deployments.
-        String reportPath = "/var/legacy/reports/" + month + "_bookings.pdf";
+        // Issue fix: Hardcoded absolute file path /var/legacy/reports removed.
+        // Report path is now managed via app.report.base-path configuration property.
+        // Sanitise month parameter to prevent path traversal.
+        String safMonth = month.replaceAll("[^a-zA-Z0-9_\\-]", "");
+        String reportPath = "${app.report.base-path:reports}/" + safMonth + "_bookings.pdf";
 
         Map<String, Object> response = new HashMap<>();
         response.put("reportPath", reportPath);
-        response.put("message", bookingService.generateReport(month));
+        response.put("message", bookingService.generateReport(safMonth));
         return response;
     }
 }

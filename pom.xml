@@ -37,6 +37,7 @@
         <!-- Explicit dependency versions for Java 17 compatibility -->
         <mysql.connector.version>8.2.0</mysql.connector.version>
         <thymeleaf-extras-java8time.version>3.0.4.RELEASE</thymeleaf-extras-java8time.version>
+        <postgresql.version>42.7.3</postgresql.version>
         <log4j2.version>2.23.1</log4j2.version>
         <commons-collections.version>3.2.2</commons-collections.version>
     </properties>
@@ -83,12 +84,23 @@
         <!--
             Issue fix: mysql-connector-java needs update for better Java 17 support
             Updated mysql-connector-java to 8.2.0 for Java 17 compatibility.
-            Note: groupId changed from 'mysql' to 'com.mysql' in 8.0.31+
+            Note: Retained for legacy compatibility; PostgreSQL driver added as primary DB driver.
         -->
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <version>${mysql.connector.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            Issue fix: Add PostgreSQL JDBC driver for PostgreSQL 16 compatibility.
+            Replaces SQL Server / MySQL as the primary database provider.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.version}</version>
             <scope>runtime</scope>
         </dependency>
 

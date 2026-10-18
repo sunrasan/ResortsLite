@@ -1,5 +1,6 @@
 package com.demo.resortslite;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -15,29 +16,26 @@ public class BookingService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    // NOTE: Hardcoded database credentials in source code.
-    // Use AWS Secrets Manager or environment variables instead of hardcoded values.
-    private static final String DB_HOST = "db-prod.resorts-internal.com";
-    private static final String DB_USER = "admin";
-    private static final String DB_PASS = "Resort$Pass#2019!";
+    // Issue fix: Hardcoded database credentials removed from source code.
+    // DB_HOST, DB_USER, DB_PASS are now managed via application.properties /
+    // environment variables / AWS Secrets Manager. No credentials in source.
 
-    // NOTE: Hardcoded infrastructure hostname.
-    // Cloud IP addresses and service endpoints change on restart/redeployment.
-    // Must be externalised to environment variables / Parameter Store.
-    private static final String PAYMENT_API = "http://10.0.1.45:9090/payments/charge";
+    // Issue fix: Hardcoded infrastructure hostname / IP replaced with
+    // externalised configuration via @Value and environment variable.
+    @Value("${app.payment.endpoint:https://payment-svc.internal/charge}")
+    private String paymentApi;
 
     public Map<String, Object> createBooking(String guestName, String roomType,
                                               String checkIn, String checkOut) {
         String bookingId = "BK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-        // NOTE: Using parameterised query to prevent SQL injection.
-        // Replaced string concatenation with JdbcTemplate parameterised '?' placeholders.
+        // Using parameterised query to prevent SQL injection.
+        // PostgreSQL-compatible INSERT with positional '?' placeholders via JdbcTemplate.
         String sql = "INSERT INTO bookings (id, guest, room, checkin, checkout) VALUES (?, ?, ?, ?, ?)";
         jdbcTemplate.update(sql, bookingId, guestName, roomType, checkIn, checkOut);
 
         // Issue fix: MD5 Weak Cryptographic Hash Algorithm Used for Confirmation Codes
         // Replaced MD5 (broken, RFC 6151) with SHA-256 for confirmation code hashing.
-        // MD5 is still available in Java 25 but is cryptographically broken for security use.
         String confirmCode = sha256Hash(bookingId + guestName);
 
         Map<String, Object> booking = new HashMap<>();
@@ -47,13 +45,13 @@ public class BookingService {
         booking.put("checkIn", checkIn);
         booking.put("checkOut", checkOut);
         booking.put("confirmationCode", confirmCode);
-        booking.put("dbHost", DB_HOST);
+        // Issue fix: Removed DB_HOST from response payload — no infrastructure details exposed.
         return booking;
     }
 
     public Map<String, Object> getBookingById(String bookingId) {
-        // NOTE: Using parameterised query to prevent SQL injection.
-        // Replaced string concatenation with JdbcTemplate parameterised '?' placeholder.
+        // Using parameterised query to prevent SQL injection.
+        // PostgreSQL-compatible SELECT with positional '?' placeholder via JdbcTemplate.
         String sql = "SELECT * FROM bookings WHERE id = ?";
         Map<String, Object> result = new HashMap<>();
         try {
@@ -125,7 +123,9 @@ public class BookingService {
      * @return a status message indicating the report generation result
      */
     public String generateReport(String month) {
-        return "Report generation triggered for: " + month + " via " + PAYMENT_API;
+        // Issue fix: Removed hardcoded PAYMENT_API constant from report message.
+        // Payment endpoint is now injected via @Value and not exposed in report output.
+        return "Report generation triggered for: " + month;
     }
 
     /**
